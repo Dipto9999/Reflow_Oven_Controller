@@ -1,0 +1,1102 @@
+                  2   $LIST
+0000              4   
+0000              5   ;  N76E003 pinout:
+0000              6   ;                               -------
+0000              7   ;       PWM2/IC6/T0/AIN4/P0.5 -|1    20|- P0.4/AIN5/STADC/PWM3/IC3
+0000              8   ;               TXD/AIN3/P0.6 -|2    19|- P0.3/PWM5/IC5/AIN6
+0000              9   ;               RXD/AIN2/P0.7 -|3    18|- P0.2/ICPCK/OCDCK/RXD_1/[SCL]
+0000             10   ;                    RST/P2.0 -|4    17|- P0.1/PWM4/IC4/MISO
+0000             11   ;        INT0/OSCIN/AIN1/P3.0 -|5    16|- P0.0/PWM3/IC3/MOSI/T1
+0000             12   ;              INT1/AIN0/P1.7 -|6    15|- P1.0/PWM2/IC2/SPCLK
+0000             13   ;                         GND -|7    14|- P1.1/PWM1/IC1/AIN7/CLO
+0000             14   ;[SDA]/TXD_1/ICPDA/OCDDA/P1.6 -|8    13|- P1.2/PWM0/IC0
+0000             15   ;                         VDD -|9    12|- P1.3/SCL/[STADC]
+0000             16   ;            PWM5/IC7/SS/P1.5 -|10   11|- P1.4/SDA/FB/PWM1
+0000             17   ;                               -------
+0000             18   ;
+0000             19   ; 2 3 4 7 9 19 18 17 16 12 11 15 10 6 5 14
+0000             20   
+0000             21   
+0000             22   ;-------------------;
+0000             23   ; Clock Frequencies ;
+0000             24   ;-------------------;
+0000             25   
+0000             26   CLK               EQU 16600000 ; Microcontroller System Frequency in Hz
+0000             27   BAUD              EQU 115200 ; Baud Rate for UART in BPS
+0000             28   
+0000             29   TIMER0_RATE   EQU 4096     ; 2048Hz Squarewave (Peak Amplitude of CEM-1203 Speaker)
+0000             30   TIMER0_RELOAD EQU ((65536-(CLK/TIMER0_RATE)))
+0000             31   
+0000             32   TIMER1_RELOAD     EQU (0X100 - (CLK / (16 * BAUD)))
+0000             33   
+0000             34   TIMER2_RATE       EQU 1000     ; 1000Hz, for a timer tick of 1ms
+0000             35   TIMER2_RELOAD     EQU ((65536- (CLK/TIMER2_RATE)))
+0000             36   
+0000             37   
+0000             38   ;-------------------;
+0000             39   ;- Pin Definitions -;
+0000             40   ;-------------------;
+0000             41   
+0000             42   START_BUTTON       EQU P0.4 ; Pin 20
+0000             43   MODE_BUTTON       EQU P0.3 ; Pin 19
+0000             44   
+0000             45   TENS_BUTTON_PLUS       EQU P1.3 ; Pin 12
+0000             46   ONES_BUTTON_PLUS       EQU P0.0 ; Pin 16
+0000             47   
+0000             48   TENS_BUTTON_MINUS       EQU P0.1 ; Pin 17
+0000             49   ONES_BUTTON_MINUS       EQU P0.2 ; Pin 18
+0000             50   
+0000             51   MX_PIN            EQU P1.6 ; Pin 8
+0000             52   OUTPUT_PIN             EQU P1.5 ; Pin 10
+0000             53   
+0000             54   REF_ADC           EQU P1.7 ; Pin 6
+0000             55   LM335_ADC                  EQU P3.0 ; Pin 5
+0000             56   SPEAKER_OUT       EQU P0.5 ; Pin 1
+0000             57   THERMOCOUPLE_ADC  EQU P1.1 ; Pin 14
+0000             58   
+0000             59   ; Reset vector
+0000             60   ORG 0x0000
+0000 020C32      61       LJMP Main
+0003             62   
+0003             63   ; External interrupt 0 vector (not used in this code)
+0003             64   ORG 0x0003
+0003             65   
+0003 32          66            RETI
+0004             67   
+0004             68   ; Timer/Counter 0 overflow interrupt vector
+000B             69   ORG 0x000B
+000B 020A2A      70            LJMP Timer0_ISR
+000E             71   
+000E             72   ; External interrupt 1 vector (not used in this code)
+0013             73   ORG 0x0013
+0013 32          74            RETI
+0014             75   
+0014             76   ; Timer/Counter 1 overflow interrupt vector (not used in this code)
+001B             77   ORG 0x001B
+001B 32          78            RETI
+001C             79   
+001C             80   ; Serial port receive/transmit interrupt vector (not used in this code)
+0023             81   ORG 0x0023
+0023 32          82            RETI
+0024             83   
+0024             84   ; Timer/Counter 2 overflow interrupt vector
+002B             85   ORG 0x002B
+002B 020A3F      86            LJMP Timer2_ISR
+002E             87   
+0030             88   DSEG AT 0x30
+0030             89   
+0030             90   STATE_NUM:                 DS 1 ;
+0031             91   
+0031             92   Count1ms:             DS 2 ; Used to Determine When 1s Has Passed
+0033             93   Speaker_Counter1ms:    DS 2
+0035             94   Speaker_Counts:            DS 1 ;
+0036             95   
+0036             96   BCD_Counter:          DS 1 ; The BCD counter incremented in the ISR and displayed in the main loop
+0037             97   Current_Counter:           DS 1 ;
+0038             98   Resulting_Counter:         DS 1 ;
+0039             99   
+0039            100   Timer_State:          DS 1 ;
+003A            101   Beep_Count:                        DS 1 ;
+003B            102   Desired_PWM:               DS 2 ;
+003D            103   
+003D            104   ;------------------------;
+003D            105   ;   Temperature Values   ;
+003D            106   ;------------------------;
+003D            107   
+003D            108   TEMP_ERROR: DS 1
+003E            109   TEMP_SOAK:  DS 1
+003F            110   TEMP_REFLOW: DS 1
+0040            111   
+0040            112   TEMP_DONE EQU 60
+0040            113   
+0040            114   TX_SIZE  EQU 5 ; Size of the Transmit Buffer
+0040            115   TX_BUFF: DS TX_SIZE ; Buffer for Transmit Characters
+0045            116   
+0045            117   X:   DS 4
+0049            118   Y:   DS 4
+004D            119   BCD: DS 5
+0052            120   
+0052            121   OVEN_BCD: DS 4
+0056            122   
+0056            123   Output_Voltage: DS 4
+005A            124   VLED_ADC: DS 2
+005C            125   
+005C            126   LM335_TEMP: DS 4 ; 2 Byte Temperature Value With 0.01 Degree Resolution
+0060            127   THERMOCOUPLE_TEMP: DS 4 ; 2 Byte Temperature Value With 0.01 Degree Resolution
+0064            128   OVEN_TEMP: DS 1 ; 1 Byte Temperature Value With 1 Degree Resolution
+0065            129   
+0065            130   
+0000            131   BSEG
+0000            132   MF: DBIT 1
+0001            133   
+0001            134   Below_Temp_Flag: DBIT 1
+0002            135   Error_Triggered_Flag: DBIT 1
+0003            136   
+0003            137   Speaker_En_Flag:   DBIT 1
+0004            138   Reflow_Soak_Flag:   DBIT 1
+0005            139   State_TX_Flag: DBIT 1
+0006            140   
+0006            141   Second_Flag:  DBIT 1
+0007            142   Emergency_Flag:  DBIT 1
+0008            143   
+0008            144   SOAK_LESS_THAN_REFLOW_FLAG: DBIT 1
+0009            145   
+0009            146   BTP: dbit 1 ;Multiplex buttons
+000A            147   BOP: dbit 1
+000B            148   BTM: dbit 1
+000C            149   BOM: dbit 1
+000D            150   BMode: dbit 1
+000E            151   Mode: dbit 1
+000F            152   
+000F            153   
+012D             75   $LIST
+                546   $LIST
+0669            309   $LIST
+0696             43   $LIST
+                159   $LIST
+0696            161   
+0696 546F3D20   162   Initial_Message1:  db 'To= xxC  Tj=xxC ', 0
+     78784320
+     20546A3D
+     78784320
+     00
+06A7 73787878   163   Initial_Message2:  db 'sxxx.00 rxxx.00 ', 0
+     2E303020
+     72787878
+     2E303020
+     00
+06B8            164   
+06B8            165   CSEG
+06B8            166   
+06B8 546F3D00   167   To_MSG: DB 'To=', 0
+06BC 43202054   168   Tj_MSG: DB 'C  Tj=', 0
+     6A3D00
+06C3 20202020   169   ERROR_MSG: DB '     ERROR      ', 0
+     20455252
+     4F522020
+     20202020
+     00
+06D4 20202020   170   TEMP_MSG: DB '     S > R      ', 0
+     2053203E
+     20522020
+     20202020
+     00
+06E5 20202020   171   EMPTY_MSG: DB '                ', 0
+     20202020
+     20202020
+     20202020
+     00
+06F6            172   
+06F6            173   LCD_RS EQU P1.3 ; Pin 12
+06F6            174   LCD_E  EQU P1.4 ; Pin 11
+06F6            175   LCD_D4 EQU P0.0 ; Pin 16
+06F6            176   LCD_D5 EQU P0.1 ; Pin 15
+06F6            177   LCD_D6 EQU P0.2 ; Pin 18
+06F6            178   LCD_D7 EQU P0.3 ; Pin 19
+06F6            179   
+06F6            180   Soak_LT_Reflow:
+06F6 E53F       181            MOV a, TEMP_REFLOW
+06F8 953E       182            SUBB a, TEMP_SOAK ; Good If REFLOW - SOAK > 0
+06FA 5005       183            JNC Soak_LT_Reflow_Done
+06FC 753000     184            MOV STATE_NUM, #0x00
+06FF D208       185            SETB SOAK_LESS_THAN_REFLOW_FLAG
+0701            186   Soak_LT_Reflow_Done:
+0701 22         187            RET
+0702            188   
+0702            189   Display_LCDFinal:
+0702 120504     190            LCALL Display_LM335_Temperature
+0705 120544     191            LCALL Display_Oven_Temperature
+0708            192   
+0708 C0E0       193            PUSH acc
+070A 7401       193            MOV a, #1
+070C 14         193            dec a
+070D 1200C7     193            LCALL ?Set_Cursor_1 ; Select column and row
+0710 D0E0       193            POP acc
+0712 C083       194            PUSH dph
+0714 C082       194            PUSH dpl
+0716 C0E0       194            PUSH acc
+0718 9006B8     194            MOV dptr, #To_MSG
+071B 1200BA     194            LCALL ?Send_Constant_String
+071E D0E0       194            POP acc
+0720 D082       194            POP dpl
+0722 D083       194            POP dph
+0724            195   
+0724 C0E0       196            PUSH acc
+0726 7407       196            MOV a, #7
+0728 14         196            dec a
+0729 1200C7     196            LCALL ?Set_Cursor_1 ; Select column and row
+072C D0E0       196            POP acc
+072E C083       197            PUSH dph
+0730 C082       197            PUSH dpl
+0732 C0E0       197            PUSH acc
+0734 9006BC     197            MOV dptr, #Tj_MSG
+0737 1200BA     197            LCALL ?Send_Constant_String
+073A D0E0       197            POP acc
+073C D082       197            POP dpl
+073E D083       197            POP dph
+0740            198   
+0740 C0E0       199            PUSH acc
+0742 740F       199            MOV a, #15
+0744 14         199            dec a
+0745 1200C7     199            LCALL ?Set_Cursor_1 ; Select column and row
+0748 D0E0       199            POP acc
+074A C0E0       200            PUSH acc
+074C 7443       200            MOV a, #'C'
+074E 12007D     200            LCALL ?WriteData
+0751 D0E0       200            POP acc
+0753            201   
+0753 1205E2     202            LCALL Display_Reflow_Temperature
+0756 1205B6     203            LCALL Display_Soak_Temperature
+0759            204   
+0759 C0E0       205            PUSH acc
+075B 7401       205            MOV a, #1
+075D 14         205            dec a
+075E 1200C5     205            LCALL ?Set_Cursor_2 ; Select column and row
+0761 D0E0       205            POP acc
+0763 C0E0       206            PUSH acc
+0765 7453       206            MOV a, #'S'
+0767 12007D     206            LCALL ?WriteData
+076A D0E0       206            POP acc
+076C            207   
+076C C0E0       208            PUSH acc
+076E 7407       208            MOV a, #7
+0770 14         208            dec a
+0771 1200C5     208            LCALL ?Set_Cursor_2 ; Select column and row
+0774 D0E0       208            POP acc
+0776 C0E0       209            PUSH acc
+0778 7452       209            MOV a, #'R'
+077A 12007D     209            LCALL ?WriteData
+077D D0E0       209            POP acc
+077F            210   
+077F C0E0       211            PUSH acc
+0781 7405       211            MOV a, #5
+0783 14         211            dec a
+0784 1200C5     211            LCALL ?Set_Cursor_2 ; Select column and row
+0787 D0E0       211            POP acc
+0789 C0E0       212            PUSH acc
+078B 7443       212            MOV a, #'C'
+078D 12007D     212            LCALL ?WriteData
+0790 D0E0       212            POP acc
+0792            213   
+0792 C0E0       214            PUSH acc
+0794 740B       214            MOV a, #11
+0796 14         214            dec a
+0797 1200C5     214            LCALL ?Set_Cursor_2 ; Select column and row
+079A D0E0       214            POP acc
+079C C0E0       215            PUSH acc
+079E 7443       215            MOV a, #'C'
+07A0 12007D     215            LCALL ?WriteData
+07A3 D0E0       215            POP acc
+07A5            216   
+07A5 C0E0       217            PUSH acc
+07A7 740F       217            MOV a, #15
+07A9 14         217            dec a
+07AA 1200C5     217            LCALL ?Set_Cursor_2 ; Select column and row
+07AD D0E0       217            POP acc
+07AF C000       218            PUSH ar0
+07B1 A830       218            MOV r0, STATE_NUM
+07B3 1200CC     218            LCALL ?Display_BCD
+07B6 D000       218            POP ar0
+07B8            219   
+07B8 300E15     220            JNB Mode, Display_Soak
+07BB            221   Display_Reflow:
+07BB C0E0       222            PUSH acc
+07BD 740D       222            MOV a, #13
+07BF 14         222            dec a
+07C0 1200C5     222            LCALL ?Set_Cursor_2 ; Select column and row
+07C3 D0E0       222            POP acc
+07C5 C0E0       223            PUSH acc
+07C7 7452       223            MOV a, #'R'
+07C9 12007D     223            LCALL ?WriteData
+07CC D0E0       223            POP acc
+07CE 8013       224            SJMP Display_Mode_Done
+07D0            225   Display_Soak:
+07D0 C0E0       226            PUSH acc
+07D2 740D       226            MOV a, #13
+07D4 14         226            dec a
+07D5 1200C5     226            LCALL ?Set_Cursor_2 ; Select column and row
+07D8 D0E0       226            POP acc
+07DA C0E0       227            PUSH acc
+07DC 7453       227            MOV a, #'S'
+07DE 12007D     227            LCALL ?WriteData
+07E1 D0E0       227            POP acc
+07E3            228   Display_Mode_Done:
+07E3 22         229            RET
+07E4            230   
+07E4            231   Display_LCDTest:
+07E4 120504     232            LCALL Display_LM335_Temperature
+07E7 120544     233            LCALL Display_Oven_Temperature
+07EA            234   
+07EA C0E0       235            PUSH acc
+07EC 7401       235            MOV a, #1
+07EE 14         235            dec a
+07EF 1200C7     235            LCALL ?Set_Cursor_1 ; Select column and row
+07F2 D0E0       235            POP acc
+07F4 C000       236            PUSH ar0
+07F6 A830       236            MOV r0, STATE_NUM
+07F8 1200CC     236            LCALL ?Display_BCD
+07FB D000       236            POP ar0
+07FD            237   
+07FD C0E0       238            PUSH acc
+07FF 7401       238            MOV a, #1
+0801 14         238            dec a
+0802 1200C5     238            LCALL ?Set_Cursor_2 ; Select column and row
+0805 D0E0       238            POP acc
+0807 C000       239            PUSH ar0
+0809 A836       239            MOV r0, BCD_Counter
+080B 1200CC     239            LCALL ?Display_BCD
+080E D000       239            POP ar0
+0810 C0E0       240            PUSH acc
+0812 7405       240            MOV a, #5
+0814 14         240            dec a
+0815 1200C5     240            LCALL ?Set_Cursor_2 ; Select column and row
+0818 D0E0       240            POP acc
+081A C000       241            PUSH ar0
+081C A838       241            MOV r0, Resulting_Counter
+081E 1200CC     241            LCALL ?Display_BCD
+0821 D000       241            POP ar0
+0823            242   
+0823 22         243            RET
+0824            244   
+0824            245   Display_Error:
+0824 C0E0       246            PUSH acc
+0826 7401       246            MOV a, #1
+0828 14         246            dec a
+0829 1200C7     246            LCALL ?Set_Cursor_1 ; Select column and row
+082C D0E0       246            POP acc
+082E C083       247            PUSH dph
+0830 C082       247            PUSH dpl
+0832 C0E0       247            PUSH acc
+0834 9006C3     247            MOV dptr, #ERROR_MSG
+0837 1200BA     247            LCALL ?Send_Constant_String
+083A D0E0       247            POP acc
+083C D082       247            POP dpl
+083E D083       247            POP dph
+0840 C0E0       248            PUSH acc
+0842 7401       248            MOV a, #1
+0844 14         248            dec a
+0845 1200C5     248            LCALL ?Set_Cursor_2 ; Select column and row
+0848 D0E0       248            POP acc
+084A C083       249            PUSH dph
+084C C082       249            PUSH dpl
+084E C0E0       249            PUSH acc
+0850 9006D4     249            MOV dptr, #TEMP_MSG
+0853 1200BA     249            LCALL ?Send_Constant_String
+0856 D0E0       249            POP acc
+0858 D082       249            POP dpl
+085A D083       249            POP dph
+085C 120AAD     250            LCALL Wait2s
+085F C0E0       251            PUSH acc
+0861 7401       251            MOV a, #1
+0863 14         251            dec a
+0864 1200C7     251            LCALL ?Set_Cursor_1 ; Select column and row
+0867 D0E0       251            POP acc
+0869 C083       252            PUSH dph
+086B C082       252            PUSH dpl
+086D C0E0       252            PUSH acc
+086F 9006E5     252            MOV dptr, #EMPTY_MSG
+0872 1200BA     252            LCALL ?Send_Constant_String
+0875 D0E0       252            POP acc
+0877 D082       252            POP dpl
+0879 D083       252            POP dph
+087B C0E0       253            PUSH acc
+087D 7401       253            MOV a, #1
+087F 14         253            dec a
+0880 1200C5     253            LCALL ?Set_Cursor_2 ; Select column and row
+0883 D0E0       253            POP acc
+0885 C083       254            PUSH dph
+0887 C082       254            PUSH dpl
+0889 C0E0       254            PUSH acc
+088B 9006E5     254            MOV dptr, #EMPTY_MSG
+088E 1200BA     254            LCALL ?Send_Constant_String
+0891 D0E0       254            POP acc
+0893 D082       254            POP dpl
+0895 D083       254            POP dph
+0897 C208       255            CLR SOAK_LESS_THAN_REFLOW_FLAG
+0899 22         256            RET
+089A            257   
+089A            258   ;-------------------------------JH
+089A            259   Check_Buttons:
+089A D209       260            SETB BTP
+089C D20A       261            SETB BOP
+089E D20B       262            SETB BTM
+08A0 D20C       263            SETB BOM
+08A2 D20D       264            SETB BMode
+08A4 D296       265            SETB MX_PIN
+08A6            266   
+08A6            267            ;Check if button is pressed
+08A6 C293       268            CLR TENS_BUTTON_PLUS
+08A8 C280       269            CLR ONES_BUTTON_PLUS
+08AA C281       270            CLR TENS_BUTTON_MINUS
+08AC C282       271            CLR ONES_BUTTON_MINUS
+08AE C283       272            CLR MODE_BUTTON
+08B0            273   
+08B0            274   
+08B0            275            ;Debounce
+08B0 209638     276            JB MX_PIN,Done_Check_B
+08B3 120AA0     277            LCALL wait30ms
+08B6 209632     278            JB MX_PIN,Done_Check_B
+08B9            279   
+08B9            280   
+08B9 D293       281            SETB TENS_BUTTON_PLUS
+08BB D280       282            SETB ONES_BUTTON_PLUS
+08BD D281       283            SETB TENS_BUTTON_MINUS
+08BF D282       284            SETB ONES_BUTTON_MINUS
+08C1 D283       285            SETB MODE_BUTTON
+08C3            286   
+08C3            287            ;Check which buttons were pushed
+08C3            288   
+08C3 C293       289            CLR TENS_BUTTON_PLUS
+08C5 A296       290            MOV c,MX_PIN
+08C7 9209       291            MOV BTP,c
+08C9 D293       292            SETB TENS_BUTTON_PLUS
+08CB            293   
+08CB            294   
+08CB C280       295            CLR ONES_BUTTON_PLUS
+08CD A296       296            MOV c,MX_PIN
+08CF 920A       297            MOV BOP,c
+08D1 D280       298            SETB ONES_BUTTON_PLUS
+08D3            299   
+08D3            300   
+08D3 C281       301            CLR TENS_BUTTON_MINUS
+08D5 A296       302            MOV c,MX_PIN
+08D7 920B       303            MOV BTM,c
+08D9 D281       304            SETB TENS_BUTTON_MINUS
+08DB            305   
+08DB            306   
+08DB C282       307            CLR ONES_BUTTON_MINUS
+08DD A296       308            MOV c,MX_PIN
+08DF 920C       309            MOV BOM,c
+08E1 D282       310            SETB ONES_BUTTON_MINUS
+08E3            311   
+08E3            312   
+08E3 C283       313            CLR MODE_BUTTON
+08E5 A296       314            MOV c,MX_PIN
+08E7 920D       315            MOV BMode,c
+08E9 D283       316            SETB MODE_BUTTON
+08EB            317   Done_Check_B:
+08EB 22         318            RET
+08EC            319   
+08EC            320   
+08EC            321   
+08EC            322   ;Set Reflow temperature -------------------------------JH
+08EC            323   Set_Reflow_Temp:
+08EC 200603     324            JB Second_Flag, One_Second_Reflow_Mark
+08EF 020968     325            LJMP Done_Set_Reflow_Temp
+08F2            326   One_Second_Reflow_Mark:
+08F2 D209       327            SETB BTP
+08F4 D20A       328            SETB BOP
+08F6 D20B       329            SETB BTM
+08F8 D20C       330            SETB BOM
+08FA D20D       331            SETB BMode
+08FC D296       332            SETB MX_PIN
+08FE            333   
+08FE            334            ;Check if button is pressed
+08FE C293       335            CLR TENS_BUTTON_PLUS
+0900 C280       336            CLR ONES_BUTTON_PLUS
+0902 C281       337            CLR TENS_BUTTON_MINUS
+0904 C282       338            CLR ONES_BUTTON_MINUS
+0906 C283       339            CLR MODE_BUTTON
+0908            340   
+0908            341            ;Debounce
+0908 20965D     342            JB MX_PIN,Done_Set_Reflow_Temp
+090B 120AA0     343            LCALL wait30ms
+090E 209657     344            JB MX_PIN,Done_Set_Reflow_Temp
+0911            345   
+0911 D293       346            SETB TENS_BUTTON_PLUS
+0913 D280       347            SETB ONES_BUTTON_PLUS
+0915 D281       348            SETB TENS_BUTTON_MINUS
+0917 D282       349            SETB ONES_BUTTON_MINUS
+0919 D283       350            SETB MODE_BUTTON
+091B            351   
+091B            352            ;Check which buttons were pushed
+091B            353   
+091B C293       354            CLR TENS_BUTTON_PLUS
+091D A296       355            MOV c,MX_PIN
+091F 9209       356            MOV BTP,c
+0921 D293       357            SETB TENS_BUTTON_PLUS
+0923            358   
+0923 200909     359            JB BTP,Check_Ones_Reflow_Plus
+0926 E53F       360            MOV a, TEMP_REFLOW
+0928 240A       361            add a,#0x0A
+092A F53F       362            MOV TEMP_Reflow,a
+092C            363            ; MOV x,a
+092C            364   
+092C            365            ; LCALL hex2bcd
+092C            366            ; LCALL Display_SetTemp
+092C 020968     367            LJMP Done_Set_Reflow_Temp
+092F            368   
+092F            369   Check_Ones_Reflow_Plus:
+092F C280       370            CLR ONES_BUTTON_PLUS
+0931 A296       371            MOV c,MX_PIN
+0933 920A       372            MOV BOP,c
+0935 D280       373            SETB ONES_BUTTON_PLUS
+0937            374   
+0937 200A09     375            JB BOP,Check_Tens_Reflow_Minus
+093A E53F       376            MOV a, TEMP_Reflow
+093C 2401       377            add a,#1
+093E F53F       378            MOV TEMP_Reflow,a
+0940            379            ; MOV x,a
+0940            380   
+0940            381            ; LCALL hex2bcd
+0940            382            ; LCALL Display_SetTemp
+0940 020968     383            LJMP Done_Set_Reflow_Temp
+0943            384   
+0943            385   Check_Tens_Reflow_Minus:
+0943 C281       386            CLR TENS_BUTTON_MINUS
+0945 A296       387            MOV c,MX_PIN
+0947 920B       388            MOV BTM,c
+0949 D281       389            SETB TENS_BUTTON_MINUS
+094B            390   
+094B 200B09     391            JB BTM,Check_Ones_Reflow_Minus
+094E E53F       392            MOV a, TEMP_Reflow
+0950 940A       393            SUBB a,#10
+0952 F53F       394            MOV TEMP_Reflow,a
+0954            395            ; MOV x,a
+0954            396   
+0954            397            ; LCALL hex2bcd
+0954            398            ; LCALL Display_SetTemp
+0954 020968     399            LJMP Done_Set_Reflow_Temp
+0957            400   
+0957            401   Check_Ones_Reflow_Minus:
+0957 C282       402            CLR ONES_BUTTON_MINUS
+0959 A296       403            MOV c,MX_PIN
+095B 920C       404            MOV BOM,c
+095D D282       405            SETB ONES_BUTTON_MINUS
+095F            406   
+095F 200C06     407            JB BOM,Done_Set_Reflow_Temp
+0962 E53F       408            MOV a, TEMP_Reflow
+0964 9401       409            SUBB a,#1
+0966 F53F       410            MOV TEMP_Reflow,a
+0968            411            ; MOV x,a
+0968            412   
+0968            413            ; LCALL hex2bcd
+0968            414            ; LCALL Display_SetTemp
+0968            415   
+0968            416   Done_Set_Reflow_Temp:
+0968 22         417            RET
+0969            418   
+0969            419   
+0969            420   
+0969            421   ;Set Soaking temperature
+0969            422   Set_Soak_Temp:
+0969 200603     423            JB Second_Flag, One_Second_Soak_Mark
+096C 0209E5     424            LJMP Done_Set_Soak_Temp
+096F            425   One_Second_Soak_Mark:
+096F D209       426            SETB BTP
+0971 D20A       427            SETB BOP
+0973 D20B       428            SETB BTM
+0975 D20C       429            SETB BOM
+0977 D20D       430            SETB BMode
+0979 D296       431            SETB MX_PIN
+097B            432   
+097B            433            ;Check if button is pressed
+097B C293       434            CLR TENS_BUTTON_PLUS
+097D C280       435            CLR ONES_BUTTON_PLUS
+097F C281       436            CLR TENS_BUTTON_MINUS
+0981 C282       437            CLR ONES_BUTTON_MINUS
+0983 C283       438            CLR MODE_BUTTON
+0985            439   
+0985            440            ;Debounce
+0985 20965D     441            JB MX_PIN,Done_Set_Soak_Temp
+0988 120AA0     442            LCALL wait30ms
+098B 209657     443            JB MX_PIN,Done_Set_Soak_Temp
+098E            444   
+098E D293       445            SETB TENS_BUTTON_PLUS
+0990 D280       446            SETB ONES_BUTTON_PLUS
+0992 D281       447            SETB TENS_BUTTON_MINUS
+0994 D282       448            SETB ONES_BUTTON_MINUS
+0996 D283       449            SETB MODE_BUTTON
+0998            450   
+0998            451            ;Check which buttons were pushed
+0998            452   
+0998 C293       453            CLR TENS_BUTTON_PLUS
+099A A296       454            MOV c,MX_PIN
+099C 9209       455            MOV BTP,c
+099E D293       456            SETB TENS_BUTTON_PLUS
+09A0            457   
+09A0 200909     458            JB BTP,Check_Ones_Plus_Soak
+09A3 E53E       459            MOV a, TEMP_SOAK
+09A5 240A       460            add a,#0x0A
+09A7 F53E       461            MOV TEMP_SOAK,a
+09A9            462            ; MOV x,a
+09A9            463   
+09A9            464            ; LCALL hex2bcd
+09A9            465            ; LCALL Display_SetTemp
+09A9 0209E5     466            LJMP Done_Set_Soak_Temp
+09AC            467   
+09AC            468   Check_Ones_Plus_Soak:
+09AC C280       469            CLR ONES_BUTTON_PLUS
+09AE A296       470            MOV c,MX_PIN
+09B0 920A       471            MOV BOP,c
+09B2 D280       472            SETB ONES_BUTTON_PLUS
+09B4            473   
+09B4 200A09     474            JB BOP,Check_Tens_Minus_Soak
+09B7 E53E       475            MOV a, TEMP_SOAK
+09B9 2401       476            add a,#1
+09BB F53E       477            MOV TEMP_SOAK,a
+09BD            478            ; MOV x,a
+09BD            479   
+09BD            480            ; LCALL hex2bcd
+09BD            481            ; LCALL Display_SetTemp
+09BD 0209E5     482            LJMP Done_Set_Soak_Temp
+09C0            483   
+09C0            484   Check_Tens_Minus_Soak:
+09C0 C281       485            CLR TENS_BUTTON_MINUS
+09C2 A296       486            MOV c,MX_PIN
+09C4 920B       487            MOV BTM,c
+09C6 D281       488            SETB TENS_BUTTON_MINUS
+09C8            489   
+09C8 200B09     490            JB BTM,Check_Ones_Minus_Soak
+09CB E53E       491            MOV a, TEMP_SOAK
+09CD 940A       492            SUBB a,#10
+09CF F53E       493            MOV TEMP_SOAK,a
+09D1            494            ; MOV x,a
+09D1            495   
+09D1            496            ; LCALL hex2bcd
+09D1            497            ; LCALL Display_SetTemp
+09D1 0209E5     498            LJMP Done_Set_Soak_Temp
+09D4            499   
+09D4            500   Check_Ones_Minus_Soak:
+09D4 C282       501            CLR ONES_BUTTON_MINUS
+09D6 A296       502            MOV c,MX_PIN
+09D8 920C       503            MOV BOM,c
+09DA D282       504            SETB ONES_BUTTON_MINUS
+09DC            505   
+09DC 200C06     506            JB BOM,Done_Set_Soak_Temp
+09DF E53E       507            MOV a, TEMP_SOAK
+09E1 9401       508            SUBB a,#1
+09E3 F53E       509            MOV TEMP_SOAK,a
+09E5            510            ; MOV x,a
+09E5            511   
+09E5            512            ; LCALL hex2bcd
+09E5            513            ; LCALL Display_SetTemp
+09E5            514   
+09E5            515   Done_Set_Soak_Temp:
+09E5 22         516            RET
+09E6            517   
+09E6            518   ;-------------------------------JH
+09E6            519   
+09E6            520   Init_Vars:
+09E6            521       ; Initial Values at State 0
+09E6 753000     522            MOV STATE_NUM, #0x00
+09E9            523   
+09E9 753D32     524            MOV TEMP_ERROR, #50
+09EC 753E91     525            MOV TEMP_SOAK, #145
+09EF 753FD9     526            MOV TEMP_REFLOW, #217
+09F2            527   
+09F2 755A00     528            MOV VLED_ADC+0, #0
+09F5 755B00     529            MOV VLED_ADC+1, #0
+09F8            530   
+09F8 755C00     531            MOV LM335_TEMP+0, #0
+09FB 755D00     532            MOV LM335_TEMP+1, #0
+09FE            533   
+09FE 756000     534            MOV THERMOCOUPLE_TEMP+0, #0
+0A01 756100     535            MOV THERMOCOUPLE_TEMP+1, #0
+0A04            536   Reset_Vars:
+0A04 753600     537            MOV BCD_Counter, #0x00
+0A07 753800     538            MOV Resulting_Counter, #0x00
+0A0A 753B00     539       MOV Desired_PWM+0, #0x00
+0A0D 753C00     540       MOV Desired_PWM+1, #0x00
+0A10            541   
+0A10 753500     542            MOV Speaker_Counts, #0x00
+0A13 753300     543            MOV Speaker_Counter1ms, #0x00
+0A16 753400     544            MOV Speaker_Counter1ms+1, #0x00
+0A19            545   
+0A19 C295       546       CLR OUTPUT_PIN
+0A1B D284       547            SETB START_BUTTON
+0A1D D293       548            SETB TENS_BUTTON_PLUS
+0A1F D280       549            SETB ONES_BUTTON_PLUS
+0A21 C283       550            CLR MODE_BUTTON
+0A23 C20E       551            CLR Mode
+0A25 C201       552            CLR Below_Temp_Flag
+0A27 C202       553            CLR Error_Triggered_Flag
+0A29            554   
+0A29 22         555            RET
+0A2A            556   
+0A2A            557   Timer0_ISR:
+0A2A            558            ; Save Registers to Stack.
+0A2A C0E0       559       PUSH ACC
+0A2C C0D0       560            PUSH PSW
+0A2E            561   
+0A2E C28C       562            CLR TR0
+0A30 758CF0     563            MOV TH0, #HIGH(TIMER0_RELOAD)
+0A33 758A2C     564            MOV TL0, #LOW(TIMER0_RELOAD)
+0A36 D28C       565            SETB TR0
+0A38            566   
+0A38 B285       567            CPL SPEAKER_OUT ; Toggle the Alarm Out Pin
+0A3A D0D0       568            POP PSW
+0A3C D0E0       569            POP ACC
+0A3E            570   
+0A3E 32         571            RETI
+0A3F            572   ;-------------;
+0A3F            573   ; Timer 2 ISR ;
+0A3F            574   ;-------------;
+0A3F            575   
+0A3F            576   Timer2_ISR:
+0A3F C2CF       577            CLR TF2  ; Timer 2 Doesn't Clear TF2 Automatically. Do it in the ISR.  It is Bit Addressable.
+0A41            578   
+0A41            579            ; Save Registers to Stack
+0A41 C0E0       580            PUSH ACC
+0A43 C0D0       581            PUSH PSW
+0A45            582   
+0A45            583            ; Increment 16-bit 1ms Counter.
+0A45 0531       584            INC Count1ms+0 ; Increment Low 8-bits
+0A47 E531       585            MOV a, Count1ms+0 ; Increment High 8-bits if Lower 8-bits Overflow
+0A49 7002       586            JNZ Inc_Done
+0A4B 0532       587            INC Count1ms+1
+0A4D            588   Inc_Done:
+0A4D            589   
+0A4D E539       590            MOV A, Timer_State
+0A4F B40103     591            CJNE A, #0x01, Continue ; Jump If Not In Timer State
+0A52 120669     592            LCALL Inc_PWM
+0A55            593   Continue:
+0A55            594            ; Check If oNE Second Has Passed
+0A55 E531       595            MOV A, Count1ms+0
+0A57 B4E841     596            CJNE A, #LOW(1000), Timer2_ISR_Done
+0A5A E532       597            MOV A, Count1ms+1
+0A5C B4033C     598            CJNE A, #HIGH(1000), Timer2_ISR_Done
+0A5F            599   
+0A5F D206       600            SETB Second_Flag
+0A61 D207       601            SETB Emergency_Flag
+0A63 12060E     602            LCALL TX_Temp_Oven
+0A66 E4         603            CLR A
+0A67 F531       604            MOV Count1ms+0, A
+0A69 F532       605            MOV Count1ms+1, A
+0A6B            606            ; Increment the BCD counter
+0A6B            607   
+0A6B B28C       608            CPL TR0
+0A6D E536       609            MOV A, BCD_Counter
+0A6F 2401       610            ADD A, #0x01
+0A71 D4         611            DA A
+0A72 F536       612            MOV BCD_Counter, A
+0A74            613   
+0A74            614   
+0A74 F536       615       MOV BCD_Counter, A
+0A76 B53822     616            CJNE A, Resulting_Counter, Timer2_ISR_Done ; Skip if BCD_Counter != Resulting_Counter
+0A79 E539       617            MOV A, Timer_State
+0A7B B4011D     618       CJNE A, #0x01, Timer2_ISR_Done; Skip If We're Not In Timer State
+0A7E            619   
+0A7E E530       620            MOV A, STATE_NUM
+0A80 B40111     621            CJNE A, #0x01, OtherStates ; Skip If Not State 1
+0A83            622   
+0A83            623   Check_Error_State:
+0A83            624            ; Check If Oven Temperature < 50
+0A83 120659     625            LCALL Check_Temp_Error
+0A86 300212     626            JNB Error_Triggered_Flag, Timer2_ISR_Done ; Skip If Oven Temperature <= 50
+0A89            627   Error_State_Triggered:
+0A89            628            ;CLR Error_Triggered_Flag
+0A89 753000     629            MOV STATE_NUM, #0x00
+0A8C 753600     630            MOV BCD_Counter, #0x00
+0A8F            631   
+0A8F D205       632            SETB State_TX_Flag
+0A91 020A9B     633            LJMP Timer2_ISR_Done
+0A94            634   OtherStates:
+0A94 753600     635            MOV BCD_Counter, #0x00
+0A97            636   
+0A97 D205       637            SETB State_TX_Flag
+0A99 0530       638            INC STATE_NUM ; Increment State Number
+0A9B            639   Timer2_ISR_Done:
+0A9B D0D0       640            POP PSW
+0A9D D0E0       641            POP ACC
+0A9F 32         642            RETI
+0AA0            643   
+0AA0            644   
+0AA0            645   
+0AA0            646   Wait30ms:
+0AA0 7A06       647       MOV R2, #6
+0AA2 79C8       648   W3: MOV R1, #200
+0AA4 7868       649   W2: MOV R0, #104
+0AA6 D8FE       650   W1: DJNZ R0, W1 ; 4 cycles-> 4 * 60.285ns * 104 = 25us
+0AA8 D9FA       651       DJNZ R1, W2 ; 25us * 200 = 5.0ms
+0AAA DAF6       652       DJNZ R2, W3 ; 5.0ms * 6 = 30ms (Approximately)
+0AAC 22         653       RET
+0AAD            654   
+0AAD            655   Wait2s:
+0AAD 7B02       656       MOV R3, #2      ; Adjusted for a 2-second delay
+0AAF 7AC8       657   X4: MOV R2, #200
+0AB1 79C8       658   X3: MOV R1, #200
+0AB3 7868       659   X2: MOV R0, #104
+0AB5 D8FE       660   X1: DJNZ R0, X1     ; 25us * 104 = 2.6ms (Approximately)
+0AB7 D9FA       661       DJNZ R1, X2     ; 2.6ms * 200 = 520ms (Approximately)
+0AB9 DAF6       662       DJNZ R2, X3     ; 520ms * 66 = 2 seconds (Approximately)
+0ABB DBF2       663       DJNZ R3, X4     ; 520ms * 66 = 2 seconds (Approximately)
+0ABD 22         664       RET
+0ABE            665   
+0ABE            666   
+0ABE            667   StateChanges: ; Check What Counter Number Will Be For Each State
+0ABE E530       668            MOV A, STATE_NUM
+0AC0 B40006     669            CJNE A, #0x00, Next1 ; Jump to Next1 if STATE_NUM is NOT 0
+0AC3            670   
+0AC3 120AFC     671            LCALL State0
+0AC6 020AFB     672            LJMP Done_State_Counter
+0AC9            673   Next1:
+0AC9 E530       674            MOV A, STATE_NUM
+0ACB B40106     675            CJNE A, #0x01, Next2 ; Jump to Next2 if STATE_NUM is NOT 1
+0ACE            676   
+0ACE 120B1F     677            LCALL State1
+0AD1 020AFB     678            LJMP Done_State_Counter
+0AD4            679   Next2:
+0AD4 E530       680            MOV A, STATE_NUM
+0AD6 B40206     681            CJNE A, #0x02, Next3 ; Jump to Next3 if STATE_NUM is NOT 2
+0AD9            682   
+0AD9 120B38     683            LCALL State2
+0ADC 020AFB     684            LJMP Done_State_Counter
+0ADF            685   Next3:
+0ADF E530       686            MOV a, STATE_NUM
+0AE1 B40306     687            CJNE a, #0x03, Next4 ; Jump to Next4 if STATE_NUM is NOT 3
+0AE4            688   
+0AE4 120B3F     689            LCALL State3
+0AE7 020AFB     690            LJMP Done_State_Counter
+0AEA            691   Next4:
+0AEA E530       692            MOV A, STATE_NUM
+0AEC B40406     693            CJNE A, #0x04, Next5 ; Jump to Next5 if STATE_NUM is NOT 4
+0AEF            694   
+0AEF 120B5B     695            LCALL State4
+0AF2 020AFB     696            LJMP Done_State_Counter
+0AF5            697   Next5:
+0AF5 120B62     698            LCALL State5
+0AF8 020AFB     699            LJMP Done_State_Counter
+0AFB            700   
+0AFB            701   Done_State_Counter:
+0AFB 22         702            RET
+0AFC            703   
+0AFC            704   State0:
+0AFC            705   
+0AFC 753900     706       MOV Timer_State, #0x00
+0AFF 120682     707       LCALL Power0
+0B02 12089A     708            LCALL Check_Buttons
+0B05            709   
+0B05 208416     710            JB START_BUTTON, Quit0 ; Go to Quit0 If Start Button is NOT Pressed
+0B08 120AA0     711            LCALL Wait30ms
+0B0B 208410     712            JB START_BUTTON, Quit0
+0B0E            713   
+0B0E            714   
+0B0E 3084FD     715            JNB START_BUTTON, $ ; Go to State1 If Start Button is Pressed
+0B11 753600     716            MOV BCD_Counter, #0x00
+0B14 753860     717            MOV Resulting_Counter, #0x60
+0B17 0530       718            INC STATE_NUM
+0B19            719   
+0B19 D205       720            SETB State_TX_Flag
+0B1B            721   
+0B1B 1206F6     722            LCALL Soak_LT_Reflow
+0B1E            723   Quit0:
+0B1E 22         724            RET
+0B1F            725   
+0B1F            726   State1:
+0B1F 753901     727       MOV Timer_State, #0x01
+0B22 120685     728       LCALL Power100
+0B25            729   
+0B25 A93E       730            MOV R1, TEMP_SOAK
+0B27 12064D     731            LCALL Check_Temp_Oven ; Check If Oven Temperature Reaches 150
+0B2A 20010A     732            JB Below_Temp_Flag, Quit1 ; If Temperature Below then jump to quit1
+0B2D            733   
+0B2D 753600     734            MOV BCD_Counter, #0x00
+0B30 753890     735            MOV Resulting_Counter, #0x90
+0B33 0530       736            INC STATE_NUM
+0B35            737   
+0B35 D205       738            SETB State_TX_Flag
+0B37            739   Quit1:
+0B37 22         740            RET
+0B38            741   
+0B38            742   State2:
+0B38 120688     743       LCALL Power30 ; Set Power to 20%
+0B3B 753901     744       MOV Timer_State, #0x01
+0B3E            745   
+0B3E            746   Quit2:
+0B3E 22         747            RET
+0B3F            748   
+0B3F            749   State3:
+0B3F 120685     750       LCALL Power100 ; Set Power to 100%
+0B42 753900     751       MOV Timer_State, #0x00
+0B45            752   
+0B45 A93F       753            MOV R1, TEMP_REFLOW
+0B47 12064D     754            LCALL Check_Temp_Oven
+0B4A 20010D     755            JB Below_Temp_Flag, Quit3
+0B4D            756   
+0B4D 753901     757       MOV Timer_State, #0x01
+0B50 753600     758            MOV BCD_Counter, #0x00
+0B53 753860     759            MOV Resulting_Counter, #0x60
+0B56 0530       760            INC STATE_NUM
+0B58            761   
+0B58 D205       762            SETB State_TX_Flag
+0B5A            763   Quit3:
+0B5A 22         764            RET
+0B5B            765   
+0B5B            766   State4:
+0B5B 12068F     767       LCALL Power60
+0B5E 753901     768       MOV Timer_State, #0x01
+0B61            769   Quit4:
+0B61 22         770            RET
+0B62            771   
+0B62            772   State5:
+0B62 120682     773       LCALL Power0
+0B65 753900     774       MOV Timer_State, #0x00
+0B68            775   
+0B68 793C       776            MOV R1, #TEMP_DONE
+0B6A 12064D     777            LCALL Check_Temp_Oven ; Check If Oven Temperature Reaches 60
+0B6D 30010A     778            JNB Below_Temp_Flag, Quit5  ; If temperature >= 60, Continue in State 5 (0 is Above Value)
+0B70            779   
+0B70 C201       780            CLR Below_Temp_Flag
+0B72 753000     781            MOV STATE_NUM, #0x00
+0B75 753600     782            MOV BCD_Counter, #0x00
+0B78            783   
+0B78 D205       784            SETB State_TX_Flag
+0B7A            785   Quit5:
+0B7A 22         786            RET
+0B7B            787   
+0B7B            788   ;----------------;
+0B7B            789   ; Initialization ;
+0B7B            790   ;----------------;
+0B7B            791   Init_All:
+0B7B 75AC00     792            MOV     P3M1, #0X00
+0B7E 75AD00     793            MOV     P3M2, #0X00
+0B81            794   
+0B81 75B300     795            MOV     P1M1, #0X00
+0B84 75B400     796            MOV     P1M2, #0X00
+0B87            797   
+0B87 75B100     798            MOV     P0M1, #0X00
+0B8A 75B200     799            MOV     P0M2, #0X00
+0B8D            800   
+0B8D            801   
+0B8D D206       802            SETB Second_Flag
+0B8F D207       803            SETB Emergency_Flag
+0B91            804   
+0B91 C0E0       805            PUSH acc
+0B93 7401       805            MOV a, #1
+0B95 14         805            dec a
+0B96 1200C7     805            LCALL ?Set_Cursor_1 ; Select column and row
+0B99 D0E0       805            POP acc
+0B9B C083       806            PUSH dph
+0B9D C082       806            PUSH dpl
+0B9F C0E0       806            PUSH acc
+0BA1 900696     806            MOV dptr, #Initial_Message1
+0BA4 1200BA     806            LCALL ?Send_Constant_String
+0BA7 D0E0       806            POP acc
+0BA9 D082       806            POP dpl
+0BAB D083       806            POP dph
+0BAD C0E0       807            PUSH acc
+0BAF 7401       807            MOV a, #1
+0BB1 14         807            dec a
+0BB2 1200C5     807            LCALL ?Set_Cursor_2 ; Select column and row
+0BB5 D0E0       807            POP acc
+0BB7 C083       808            PUSH dph
+0BB9 C082       808            PUSH dpl
+0BBB C0E0       808            PUSH acc
+0BBD 9006A7     808            MOV dptr, #Initial_Message2
+0BC0 1200BA     808            LCALL ?Send_Constant_String
+0BC3 D0E0       808            POP acc
+0BC5 D082       808            POP dpl
+0BC7 D083       808            POP dph
+0BC9            809   
+0BC9 1209E6     810            LCALL Init_Vars
+0BCC            811   Init_SerialPort:
+0BCC            812       ; Configure Serial Port and Baud Rate
+0BCC            813   
+0BCC            814       ; Since Reset Button Bounces, Wait a Bit Before Sending Messages.
+0BCC            815       ; Otherwise, We Risk Sending Garbage to the Serial Port.
+0BCC 79C8       816       MOV R1, #200
+0BCE 7868       817       MOV R0, #104
+0BD0 D8FE       818       DJNZ R0, $ ; 4 Cycles-> 4 * 60.285 ns * 104 = 25 us
+0BD2 D9FA       819       DJNZ R1, $-4 ; 25us * 200 = 5 ms
+0BD4            820   
+0BD4            821   Timer0_Init:
+0BD4 438E08     822            ORL CKCON, #0B0000_1000 ; Input for Timer 0 is SYSCLK/1.
+0BD7            823   
+0BD7 E589       824            MOV A, TMOD
+0BD9 54F0       825            ANL A, #0XF0 ; 1111_0000 Clear Bits for Timer 0
+0BDB 4401       826            ORL A, #0X01 ; 0000_0001 Configure Timer 0 as 16-Timer
+0BDD F589       827            MOV TMOD, A
+0BDF            828   
+0BDF 758CF0     829            MOV TH0, #HIGH(TIMER0_RELOAD)
+0BE2 758A2C     830            MOV TL0, #LOW(TIMER0_RELOAD)
+0BE5            831   
+0BE5            832            ; Enable Timer and Interrupts
+0BE5 D2A9       833       SETB ET0  ; Enable Timer 0 Interrupt
+0BE7 D28C       834            SETB TR0
+0BE9            835   Init_Timer1:
+0BE9 438E10     836            ORL     CKCON, #0X10 ; CLK is Input for Timer 1.
+0BEC 438780     837            ORL     PCON, #0X80 ; Bit SMOD = 1, Double Baud Rate
+0BEF 759852     838            MOV     SCON, #0X52
+0BF2 53C4DF     839            ANL     T3CON, #0B1101_1111
+0BF5 53890F     840            ANL     TMOD, #0X0F ; Clear Configuration Bits for Timer 1
+0BF8 438920     841            ORL     TMOD, #0X20 ; Timer 1 Mode 2
+0BFB 758DF7     842            MOV     TH1, #TIMER1_RELOAD ; TH1 = TIMER1_RELOAD;
+0BFE D28E       843            SETB TR1
+0C00            844   Init_ADC:
+0C00            845            ; Initialize the pins used by the ADC (P1.1, P1.7, P3.0) as Analog Inputs
+0C00 43B382     846            ORL     P1M1, #0B1000_0010
+0C03 53B47D     847            ANL     P1M2, #0B0111_1101
+0C06 43AC02     848            ORL     P3M1, #0B0000_0010
+0C09 53ADFD     849            ANL P3M2, #0B1111_1101
+0C0C            850   
+0C0C            851            ; AINDIDS Select if Some Pins are Analog Inputs or Digital I/O
+0C0C 75F600     852            MOV AINDIDS, #0X00 ; Disable All Analog Inputs
+0C0F 43F683     853            ORL AINDIDS, #0B1000_0011 ; Activate AIN0, AIN1, AIN7
+0C12            854   
+0C12 43E101     855            ORL ADCCON1, #0X01 ; Enable ADC
+0C15            856   Init_Timer2:
+0C15 75C800     857            MOV T2CON, #0 ; Stop Timer. Autoreload Mode.
+0C18 75CDBF     858            MOV TH2, #HIGH(TIMER2_RELOAD)
+0C1B 75CC28     859            MOV TL2, #LOW(TIMER2_RELOAD)
+0C1E            860   
+0C1E            861            ; Set Reload Value
+0C1E 43C980     862            ORL T2MOD, #0X80 ; Enable Timer 2 Autoreload Mode
+0C21 75CBBF     863            MOV RCMP2H, #HIGH(TIMER2_RELOAD)
+0C24 75CA28     864            MOV RCMP2L, #LOW(TIMER2_RELOAD)
+0C27            865   
+0C27            866            ; Init 1ms Interrupt Counter. 16-bit Variable with Two 8-bit Parts.
+0C27 E4         867            CLR A
+0C28 F531       868            MOV Count1ms+0, A
+0C2A F532       869            MOV Count1ms+1, A
+0C2C            870   
+0C2C            871            ; Enable the Timer and Interrupts.
+0C2C 439B80     872            ORL EIE, #0X80 ; Enable Timer 2 Interrupt ET2=1
+0C2F D2CA       873       SETB TR2  ; Enable Timer 2
+0C31 22         874       RET
+0C32            875   
+0C32            876   Main:
+0C32            877            ; Initialization
+0C32 75817F     878            MOV SP, #0X7F
+0C35 D2AF       879       SETB EA   ; Enable Global interrupts
+0C37 120B7B     880            LCALL Init_All
+0C3A 120087     881            LCALL LCD_4BIT
+0C3D            882   Forever:
+0C3D 12063D     883            LCALL Get_and_Transmit_Temp
+0C40 120702     884            LCALL Display_LCDFinal
+0C43 300803     885            JNB SOAK_LESS_THAN_REFLOW_FLAG, Continue_forever
+0C46 120824     886            LCALL Display_Error
+0C49            887   Continue_forever:
+0C49 120ABE     888            LCALL StateChanges
+0C4C            889   
+0C4C 120110     890            LCALL TX_StateNumber
+0C4F            891   
+0C4F C205       892            CLR State_TX_Flag
+0C51            893   
+0C51 200D05     894            JB BMode, No_Mode_Change
+0C54 300602     895            JNB Second_Flag, No_Mode_Change
+0C57 B20E       896            CPL Mode
+0C59            897   No_Mode_Change:
+0C59 300E06     898            JNB Mode, Soak_Temp
+0C5C 1208EC     899            LCALL Set_Reflow_Temp
+0C5F 020C65     900            LJMP Done_Temp_Set
+0C62            901   
+0C62            902   Soak_Temp:
+0C62 120969     903            LCALL Set_Soak_Temp
+0C65            904   
+0C65            905   Done_Temp_Set:
+0C65 C206       906            CLR Second_Flag
+0C67            907   Button_Reset:
+0C67 E530       908            MOV A, STATE_NUM
+0C69 6010       909            JZ Forever_End ; skip if a  = 0
+0C6B            910   
+0C6B 30070D     911            JNB Emergency_Flag, Forever_End
+0C6E 20840A     912            JB START_BUTTON, Forever_End ; Go to Quit0 If Start Button is NOT Pressed
+0C71 C207       913            CLR Emergency_Flag
+0C73            914   
+0C73 D205       915            SETB State_TX_Flag
+0C75 753000     916            MOV STATE_NUM, #0x00
+0C78 3084FD     917            JNB Start_Button, $
+0C7B            918   Forever_End:
+0C7B 020C3D     919            LJMP Forever
+0C7E            920   EN
