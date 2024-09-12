@@ -86,7 +86,7 @@ We also implemented the ability to download these with the [`downloading.py`](Da
 
 We have uploaded our Final Demo on <a href="https://www.youtube.com/watch?v=Bzm737dduOw" target="_blank">Youtube</a>.
 
-We have also attached our [Project Report](/Report/ELEC291_TeamA9_ReflowOvenController.pdf) for detailed analysis of our engineered solution.
+We have also attached our [Project Report](/Report/ELEC291_TeamA9_ReflowOvenController_Report.pdf) for detailed analysis of our engineered solution.
 
 ## Credit
 
