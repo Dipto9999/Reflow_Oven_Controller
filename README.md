@@ -64,6 +64,8 @@ Through firmware, we performed arithmetic on the voltage read to account for the
 
 The controller functionality relied on an accurate calculation of this to be summed with the room temperature and was required to be within *3C* accuracy. We validated this extensively, using the [`Multimeter_Temp.pyw`](Firmware/Multimeter_Temp.pyw) application.
 
+https://github.com/user-attachments/assets/6e5ac46c-fdab-4dab-93d4-04a25c11d7c0
+
 ### Compile & Flash
 
 The build tasks in the [`.vscode`](Firmware/.vscode/tasks.json) file were set up to run :
