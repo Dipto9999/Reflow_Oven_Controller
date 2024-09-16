@@ -15,7 +15,7 @@
 
 ## Overview
 
-<img align = "right" src="Report/Figures/CircuitOfInterest.jpg" width = 200 height = 150 title="Reflow Oven Controller - Circuit">
+<img align = "right" src="Report/Figures/CircuitOfInterest.jpg" width = 200 height = 150 title = "Reflow Oven Controller - Circuit">
 
 We built and programmed a controller to apply the reflow soldering process for assembling **EFM8** boards with ovens in the UBC ECE Undergraduate Lab.
 
